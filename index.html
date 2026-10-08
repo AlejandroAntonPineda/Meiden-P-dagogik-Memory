@@ -77,12 +77,22 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            cursor: pointer;
             box-shadow: 0 8px 16px rgba(0,0,0,0.15);
-            transition: transform 0.2s, box-shadow 0.2s, border 0.2s;
+            transition: transform 0.2s, box-shadow 0.2s, border 0.2s, background-color 0.3s;
             border: 4px solid transparent;
             overflow: hidden;
             position: relative;
+        }
+
+        /* Arrastrar y Soltar CSS */
+        .card[data-type="image"] {
+            cursor: grab;
+        }
+        .card[data-type="image"]:active {
+            cursor: grabbing;
+        }
+        .card[data-type="audio"] {
+            cursor: pointer;
         }
 
         .card:hover:not(.matched) {
@@ -90,39 +100,48 @@
             box-shadow: 0 12px 20px rgba(0,0,0,0.2);
         }
 
-        .card.selected {
+        /* Hover al pasar por encima con una imagen */
+        .card.drag-over {
             border-color: #3498db;
             transform: scale(1.05);
             box-shadow: 0 0 15px #3498db;
         }
 
+        /* Correcto: Verde */
         .card.matched {
             border-color: #2ecc71;
-            opacity: 0.6;
+            background-color: #eafaf1; /* Fondo verde claro */
+            opacity: 0.8;
             cursor: default;
             transform: scale(0.95);
+        }
+
+        /* Incorrecto: Rojo y animación de temblor */
+        .card.wrong {
+            border-color: #e74c3c;
+            background-color: #fadbd8; /* Fondo rojo claro */
+            animation: shake 0.4s;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            50% { transform: translateX(5px); }
+            75% { transform: translateX(-5px); }
         }
 
         .card img {
             width: 100%;
             height: 100%;
             object-fit: cover;
+            pointer-events: none; /* Evita que el navegador intente arrastrar solo la imagen nativa */
         }
 
         .icon {
             font-size: 60px;
             color: #3498db;
             filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.2));
-        }
-
-        .card.selected .icon {
-            animation: pulse 1s infinite;
-        }
-
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.15); }
-            100% { transform: scale(1); }
+            pointer-events: none;
         }
 
         .btn {
@@ -159,8 +178,12 @@
 <body>
 
     <h1>🧠 Zuordnungsspiel</h1>
-    <p class="instruction">Wähle ein Bild und den passenden Ton aus, um sie zu verbinden!</p>
+    <p class="instruction">Ziehe das Bild auf den passenden Ton! (¡Arrastra la imagen hacia el sonido correcto!)</p>
 
+    <div class="stats">
+        <div>Versuche (Intentos): <span id="moves">0</span></div>
+        <div>Zeit (Tiempo): <span id="time">0</span>s</div>
+    </div>
     
     <div class="board-container">
         <!-- Fila de imágenes -->
@@ -191,9 +214,7 @@
         let imageBoard = document.getElementById('image-board');
         let audioBoard = document.getElementById('audio-board');
         
-        let firstCard = null;
-        let secondCard = null;
-        let lockBoard = false;
+        let draggedCard = null; // Guardará la imagen que estamos arrastrando
         let currentAudio = null;
         
         let matches = 0;
@@ -217,14 +238,91 @@
                 const imgElement = document.createElement('img');
                 imgElement.src = data.file;
                 cardElement.appendChild(imgElement);
+
+                // Configuramos la tarjeta para poder ser arrastrada
+                cardElement.setAttribute('draggable', 'true');
+                
+                cardElement.addEventListener('dragstart', function(e) {
+                    if (this.classList.contains('matched')) {
+                        e.preventDefault();
+                        return;
+                    }
+                    draggedCard = this;
+                    setTimeout(() => this.style.opacity = '0.5', 0); // Efecto visual al arrastrar
+                });
+
+                cardElement.addEventListener('dragend', function() {
+                    this.style.opacity = '1';
+                    draggedCard = null;
+                });
+
             } else if (data.type === 'audio') {
                 const iconElement = document.createElement('div');
                 iconElement.classList.add('icon');
                 iconElement.innerHTML = '🔊'; 
                 cardElement.appendChild(iconElement);
+
+                // Permitimos hacer clic para escuchar el sonido como pista
+                cardElement.addEventListener('click', () => {
+                    playAudio(data.file);
+                });
+
+                // Eventos de zona para soltar (Dropzone)
+                cardElement.addEventListener('dragover', function(e) {
+                    e.preventDefault(); // Necesario para permitir que se suelte algo
+                    if (!this.classList.contains('matched')) {
+                        this.classList.add('drag-over');
+                    }
+                });
+
+                cardElement.addEventListener('dragleave', function() {
+                    this.classList.remove('drag-over');
+                });
+
+                cardElement.addEventListener('drop', function(e) {
+                    e.preventDefault();
+                    this.classList.remove('drag-over');
+
+                    // Si no hay tarjeta arrastrada o esta casilla ya está resuelta, ignoramos
+                    if (!draggedCard || this.classList.contains('matched')) return;
+
+                    startTimer();
+                    moves++;
+                    document.getElementById('moves').innerText = moves;
+
+                    // Reproducir el sonido sobre el que soltamos
+                    playAudio(this.dataset.file);
+
+                    // LÓGICA DE VALIDACIÓN (Correcto / Incorrecto)
+                    if (draggedCard.dataset.id === this.dataset.id) {
+                        // ¡Correcto! Ambas se ponen verdes
+                        draggedCard.classList.add('matched');
+                        this.classList.add('matched');
+                        
+                        // Evitamos que la imagen se pueda volver a arrastrar
+                        draggedCard.setAttribute('draggable', 'false');
+                        
+                        matches++;
+                        if (matches === imagesData.length) {
+                            winGame();
+                        }
+                    } else {
+                        // ¡Incorrecto! Ambas se ponen rojas y tiemblan
+                        const tempImage = draggedCard;
+                        const tempAudio = this;
+                        
+                        tempImage.classList.add('wrong');
+                        tempAudio.classList.add('wrong');
+                        
+                        // Quitamos el color rojo después de casi 1 segundo
+                        setTimeout(() => {
+                            tempImage.classList.remove('wrong');
+                            tempAudio.classList.remove('wrong');
+                        }, 800);
+                    }
+                });
             }
 
-            cardElement.addEventListener('click', selectCard);
             return cardElement;
         }
 
@@ -252,79 +350,7 @@
         function playAudio(file) {
             if (currentAudio) { currentAudio.pause(); currentAudio.currentTime = 0; }
             currentAudio = new Audio(file);
-            currentAudio.play();
-        }
-
-        function selectCard() {
-            if (lockBoard) return;
-            if (this.classList.contains('matched')) return;
-            if (this === firstCard) return; 
-
-            startTimer();
-
-            // Si el usuario elige otra carta del mismo tipo antes de completar la pareja, cambiamos la selección
-            if (firstCard && firstCard.dataset.type === this.dataset.type) {
-                firstCard.classList.remove('selected');
-                firstCard = this;
-                this.classList.add('selected');
-                if (this.dataset.type === 'audio') playAudio(this.dataset.file);
-                return;
-            }
-
-            this.classList.add('selected');
-            if (this.dataset.type === 'audio') playAudio(this.dataset.file);
-
-            if (!firstCard) {
-                firstCard = this;
-                return;
-            }
-
-            secondCard = this;
-            moves++;
-            document.getElementById('moves').innerText = moves;
-            checkForMatch();
-        }
-
-        function checkForMatch() {
-            let isMatch = firstCard.dataset.id === secondCard.dataset.id;
-
-            if (isMatch) {
-                disableCards();
-            } else {
-                unselectCards();
-            }
-        }
-
-        function disableCards() {
-            firstCard.classList.remove('selected');
-            secondCard.classList.remove('selected');
-            
-            firstCard.classList.add('matched');
-            secondCard.classList.add('matched');
-            
-            firstCard.removeEventListener('click', selectCard);
-            secondCard.removeEventListener('click', selectCard);
-            
-            matches++;
-            if (matches === imagesData.length) {
-                winGame();
-            }
-            
-            resetBoard();
-        }
-
-        function unselectCards() {
-            lockBoard = true;
-            setTimeout(() => {
-                firstCard.classList.remove('selected');
-                secondCard.classList.remove('selected');
-                if(currentAudio) { currentAudio.pause(); } 
-                resetBoard();
-            }, 1000); 
-        }
-
-        function resetBoard() {
-            [firstCard, secondCard, lockBoard] = [null, null, false];
+            currentAudio.play().catch(e => console.log("Audio play failed:", e));
         }
 
         function winGame() {
