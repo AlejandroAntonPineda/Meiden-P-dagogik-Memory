@@ -38,18 +38,6 @@
             font-weight: 600;
         }
 
-        .stats {
-            display: flex;
-            gap: 30px;
-            font-size: 1.2rem;
-            font-weight: 600;
-            margin-bottom: 20px;
-            background: rgba(255, 255, 255, 0.4);
-            padding: 10px 30px;
-            border-radius: 50px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-        }
-
         .board-container {
             display: flex;
             flex-direction: column;
@@ -179,8 +167,7 @@
 
     <h1>🧠 Zuordnungsspiel</h1>
     <p class="instruction">Ziehe das Bild auf den passenden Ton! (¡Arrastra la imagen hacia el sonido correcto!)</p>
-
-
+    
     <div class="board-container">
         <!-- Fila de imágenes -->
         <div class="board-row" id="image-board"></div>
@@ -212,12 +199,7 @@
         
         let draggedCard = null; // Guardará la imagen que estamos arrastrando
         let currentAudio = null;
-        
         let matches = 0;
-        let moves = 0;
-        let timer = 0;
-        let timerInterval = null;
-        let gameStarted = false;
 
         function shuffle(array) {
             array.sort(() => Math.random() - 0.5);
@@ -282,10 +264,6 @@
                     // Si no hay tarjeta arrastrada o esta casilla ya está resuelta, ignoramos
                     if (!draggedCard || this.classList.contains('matched')) return;
 
-                    startTimer();
-                    moves++;
-                    document.getElementById('moves').innerText = moves;
-
                     // Reproducir el sonido sobre el que soltamos
                     playAudio(this.dataset.file);
 
@@ -333,16 +311,6 @@
             audiosData.forEach(data => audioBoard.appendChild(createCardElement(data)));
         }
 
-        function startTimer() {
-            if (!gameStarted) {
-                gameStarted = true;
-                timerInterval = setInterval(() => {
-                    timer++;
-                    document.getElementById('time').innerText = timer;
-                }, 1000);
-            }
-        }
-
         function playAudio(file) {
             if (currentAudio) { currentAudio.pause(); currentAudio.currentTime = 0; }
             currentAudio = new Audio(file);
@@ -350,27 +318,19 @@
         }
 
         function winGame() {
-            clearInterval(timerInterval);
             setTimeout(() => {
                 confetti({
                     particleCount: 200,
                     spread: 90,
                     origin: { y: 0.6 }
                 });
-                alert(`Perfekt! Du hast alle Paare in ${moves} Versuchen und ${timer} Sekunden gefunden!`);
+                alert('Perfekt! Du hast alle Paare gefunden!');
             }, 300);
         }
 
         function restartGame() {
             matches = 0;
-            moves = 0;
-            timer = 0;
-            gameStarted = false;
-            document.getElementById('moves').innerText = moves;
-            document.getElementById('time').innerText = timer;
-            clearInterval(timerInterval);
             if(currentAudio) { currentAudio.pause(); }
-            
             initGame();
         }
 
